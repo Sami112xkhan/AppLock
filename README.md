@@ -115,7 +115,7 @@ This project is licensed under the Apache License, Version 2.0 - see the [LICENS
 
 ## 🙏 Acknowledgments
 
-- Original project by Pranav
+- Original project by Pranav- https://github.com/PranavPurwar
 - Material 3 Design System
 - Jetpack Compose team
 - Android Biometric API
