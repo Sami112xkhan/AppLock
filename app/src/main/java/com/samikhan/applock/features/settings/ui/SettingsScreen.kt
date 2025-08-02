@@ -456,7 +456,7 @@ fun SettingsScreen(
                             context.startActivity(
                                 Intent(
                                     Intent.ACTION_VIEW,
-                                    "https://github.com/PranavPurwar/AppLock".toUri()
+                                    "https://github.com/Sami112xkhan/AppLock".toUri()
                                 )
                             )
                         })

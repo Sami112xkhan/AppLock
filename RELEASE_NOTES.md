@@ -39,7 +39,7 @@ design.
 
 ## Getting Started
 
-1. Download AppLock from the [releases page](https://github.com/PranavPurwar/AppLock/releases)
+1. Download AppLock from the [releases page](https://github.com/Sami112xkhan/AppLock/releases)
 2. Follow the initial setup to configure your password/PIN and grant necessary permissions
 3. Select the apps you want to protect using the toggles
 4. That's it! Your apps are now protected
@@ -75,6 +75,6 @@ through GitHub issues!
 
 <div align="center">
   <p><b>AppLock Team</b></p>
-  <a href="https://github.com/PranavPurwar/AppLock">GitHub</a> | 
-  <a href="https://github.com/PranavPurwar/AppLock/issues">Report Issues</a>
+  <a href="https://github.com/Sami112xkhan/AppLock">GitHub</a> |
+<a href="https://github.com/Sami112xkhan/AppLock/issues">Report Issues</a>
 </div>
