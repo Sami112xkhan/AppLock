@@ -37,6 +37,7 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialShapes
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
+import androidx.compose.material3.ElevatedButton
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.toShape
@@ -63,6 +64,8 @@ import com.samikhan.applock.data.repository.AppLockRepository
 import com.samikhan.applock.services.AppLockManager
 import com.samikhan.applock.ui.icons.Backspace
 import com.samikhan.applock.ui.icons.Fingerprint
+import com.samikhan.applock.ui.components.PatternLockView
+import com.samikhan.applock.data.repository.LockType
 import com.samikhan.applock.ui.theme.AppLockTheme
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -75,13 +78,18 @@ class PasswordOverlayActivity : FragmentActivity() {
 
     private var appName: String = ""
     private var isFinishingAfterAuth = false
+    private var attemptCount = 0
+    private val maxAttempts = 5
 
     private val TAG = "PasswordOverlayActivity"
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
 
+        Log.d(TAG, "PasswordOverlayActivity onCreate called")
         lockedPackageNameFromIntent = intent.getStringExtra("locked_package")
+        Log.d(TAG, "Locked package from intent: $lockedPackageNameFromIntent")
+        
         if (lockedPackageNameFromIntent == null) {
             Log.e(TAG, "No locked_package name provided in intent. Finishing.")
             finishAffinity()
@@ -151,11 +159,24 @@ class PasswordOverlayActivity : FragmentActivity() {
 
     private fun setupUI() {
         val onPinAttemptCallback = { pin: String ->
+            attemptCount++
+            Log.d(TAG, "Attempt $attemptCount/$maxAttempts - Input: '$pin', LockType: ${appLockRepository.getLockType()}")
+            
             val isValid = appLockRepository.validatePassword(pin)
+            Log.d(TAG, "Validation result: $isValid")
+            
             if (isValid) {
+                Log.d(TAG, "Authentication successful!")
                 lockedPackageNameFromIntent?.let { pkgName ->
                     AppLockManager.unlockApp(pkgName)
                     finishAffinity()
+                }
+            } else {
+                Log.d(TAG, "Authentication failed. Attempts remaining: ${maxAttempts - attemptCount}")
+                if (attemptCount >= maxAttempts) {
+                    Log.d(TAG, "Max attempts reached, forcing biometric authentication")
+                    // Force biometric authentication after max attempts
+                    triggerBiometricAuthentication()
                 }
             }
             isValid
@@ -171,7 +192,10 @@ class PasswordOverlayActivity : FragmentActivity() {
                         onBiometricAuth = { triggerBiometricAuthentication() },
                         onAuthSuccess = {},
                         lockedAppName = appName,
-                        onPinAttempt = onPinAttemptCallback
+                        onPinAttempt = onPinAttemptCallback,
+                        attemptCount = attemptCount,
+                        maxAttempts = maxAttempts,
+                        passwordOverlayActivity = this
                     )
                 }
             }
@@ -269,8 +293,51 @@ fun PasswordOverlayScreen(
     onBiometricAuth: () -> Unit = {},
     onAuthSuccess: () -> Unit,
     lockedAppName: String? = null,
-    onPinAttempt: ((pin: String) -> Boolean)? = null
+    onPinAttempt: ((pin: String) -> Boolean)? = null,
+    attemptCount: Int = 0,
+    maxAttempts: Int = 5,
+    passwordOverlayActivity: PasswordOverlayActivity? = null
 ) {
+    val context = LocalContext.current
+    val appLockRepository = remember { context.appLockRepository() }
+    
+    // Ensure we always have a callback, even if it's just a fallback
+    val safeOnPinAttempt: (String) -> Boolean = onPinAttempt ?: { pattern ->
+        android.util.Log.w("PasswordOverlayScreen", "Using fallback validation for pattern: '$pattern'")
+        val isValid = appLockRepository.validatePassword(pattern)
+        if (isValid) {
+            android.util.Log.d("PasswordOverlayScreen", "Fallback validation successful, triggering app unlock")
+            android.util.Log.d("PasswordOverlayScreen", "Passed activity reference: ${passwordOverlayActivity != null}")
+            android.util.Log.d("PasswordOverlayScreen", "Passed activity type: ${passwordOverlayActivity?.javaClass?.simpleName}")
+            
+            // Trigger the same unlock logic as the main callback
+            try {
+                // Use the passed activity reference if available, otherwise try context casting
+                val activity = passwordOverlayActivity ?: (context as? androidx.fragment.app.FragmentActivity)
+                android.util.Log.d("PasswordOverlayScreen", "Final activity type: ${activity?.javaClass?.simpleName}")
+                
+                if (activity is PasswordOverlayActivity) {
+                    val pkgName = activity.lockedPackageNameFromIntent
+                    android.util.Log.d("PasswordOverlayScreen", "Package name from activity: $pkgName")
+                    
+                    if (pkgName != null) {
+                        android.util.Log.d("PasswordOverlayScreen", "Unlocking app: $pkgName")
+                        com.samikhan.applock.services.AppLockManager.unlockApp(pkgName)
+                        android.util.Log.d("PasswordOverlayScreen", "App unlock called, finishing activity")
+                        activity.finishAffinity()
+                    } else {
+                        android.util.Log.e("PasswordOverlayScreen", "Package name is null!")
+                    }
+                } else {
+                    android.util.Log.e("PasswordOverlayScreen", "Activity is not PasswordOverlayActivity: ${activity?.javaClass?.name}")
+                }
+            } catch (e: Exception) {
+                android.util.Log.e("PasswordOverlayScreen", "Failed to unlock app via fallback: ${e.message}")
+                e.printStackTrace()
+            }
+        }
+        isValid
+    }
     Surface(
         modifier = modifier.fillMaxSize(),
         color = MaterialTheme.colorScheme.background
@@ -278,6 +345,12 @@ fun PasswordOverlayScreen(
         val passwordState = remember { mutableStateOf("") }
         var showError by remember { mutableStateOf(false) }
         val maxLength = 6
+        
+        val lockType = remember { 
+            val type = appLockRepository.getLockType()
+            android.util.Log.d("PasswordOverlayScreen", "Detected lock type: $type")
+            type
+        }
 
         Column(
             modifier = Modifier
@@ -292,7 +365,7 @@ fun PasswordOverlayScreen(
                 text = if (!fromMainActivity && !lockedAppName.isNullOrEmpty())
                     lockedAppName
                 else
-                    "Enter password to continue",
+                    "Enter ${if (lockType == LockType.PATTERN) "pattern" else "PIN"} to continue",
                 style = if (!fromMainActivity && !lockedAppName.isNullOrEmpty())
                     MaterialTheme.typography.titleLargeEmphasized
                 else
@@ -302,14 +375,16 @@ fun PasswordOverlayScreen(
 
             Spacer(modifier = Modifier.height(16.dp))
 
-            PasswordIndicators(
-                passwordLength = passwordState.value.length,
-                maxLength = maxLength
-            )
+            if (lockType == LockType.PIN) {
+                PasswordIndicators(
+                    passwordLength = passwordState.value.length,
+                    maxLength = maxLength
+                )
+            }
 
             if (showError) {
                 Text(
-                    text = "Incorrect PIN. Please try again.",
+                    text = "Incorrect ${if (lockType == LockType.PATTERN) "pattern" else "PIN"}. Attempt $attemptCount/$maxAttempts. Please try again.",
                     color = MaterialTheme.colorScheme.error,
                     style = MaterialTheme.typography.bodyMedium,
                     modifier = Modifier.padding(top = 8.dp)
@@ -318,26 +393,60 @@ fun PasswordOverlayScreen(
 
             Spacer(modifier = Modifier.weight(1f))
 
-            KeypadSection(
-                passwordState = passwordState,
-                maxLength = maxLength,
-                showBiometricButton = showBiometricButton,
-                fromMainActivity = fromMainActivity,
-                onBiometricAuth = onBiometricAuth,
-                onAuthSuccess = onAuthSuccess,
-                onPinAttempt = { pin ->
-                    if (onPinAttempt == null) {
-                        showError = true
-                        false
-                    } else {
-                        val result = onPinAttempt(pin)
+            if (lockType == LockType.PATTERN) {
+                android.util.Log.d("PasswordOverlayScreen", "Creating PatternLockView for pattern authentication")
+                // Pattern Lock View
+                PatternLockView(
+                    onPatternComplete = { pattern ->
+                        android.util.Log.d("PasswordOverlayScreen", "Pattern received: '$pattern'")
+                        val result = safeOnPinAttempt(pattern)
+                        android.util.Log.d("PasswordOverlayScreen", "Pattern validation result: $result")
                         showError = !result
-                        result
+                    },
+                    isEnabled = !showError
+                )
+                
+                if (showBiometricButton) {
+                    Spacer(modifier = Modifier.height(16.dp))
+                    ElevatedButton(
+                        onClick = {
+                            android.util.Log.d("PasswordOverlayScreen", "Biometric button clicked")
+                            onBiometricAuth()
+                        },
+                        modifier = Modifier.padding(8.dp),
+                        shape = CircleShape,
+                    ) {
+                        Icon(
+                            imageVector = Fingerprint,
+                            contentDescription = "Biometric Authentication",
+                            modifier = Modifier.size(24.dp),
+                            tint = MaterialTheme.colorScheme.onSurface
+                        )
                     }
-                },
-                onPasswordChange = { showError = false },
-                onPinIncorrect = { showError = true }
-            )
+                }
+            } else {
+                // PIN Keypad
+                KeypadSection(
+                    passwordState = passwordState,
+                    maxLength = maxLength,
+                    showBiometricButton = showBiometricButton,
+                    fromMainActivity = fromMainActivity,
+                    onBiometricAuth = onBiometricAuth,
+                    onAuthSuccess = onAuthSuccess,
+                    onPinAttempt = { pin ->
+                        if (onPinAttempt == null) {
+                            showError = true
+                            false
+                        } else {
+                            val result = onPinAttempt(pin)
+                            showError = !result
+                            result
+                        }
+                    },
+                    onPasswordChange = { showError = false },
+                    onPinIncorrect = { showError = true }
+                )
+            }
         }
     }
 

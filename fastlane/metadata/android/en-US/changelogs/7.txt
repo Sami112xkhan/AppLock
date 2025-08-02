@@ -1,0 +1,13 @@
+* ✨ NEW: Pattern Lock Support - Choose between 6-digit PIN or 3x3 pattern lock
+* 🔧 FIXED: AppLock app self-locking issue - app now opens without lock screen
+* 🔧 FIXED: Biometric authentication improvements and fallback handling
+* 🔧 FIXED: App list display and scrolling issues
+* 🔧 FIXED: Package name updated to com.samikhan.applock
+* 🔧 FIXED: Updated developer information and donation links
+* 🔧 FIXED: Updated app icons and branding
+
+⚠️ KNOWN ISSUE: Pattern lock may not work correctly for unlocking the AppLock app itself. PIN authentication works fine. This will be fixed in a future update.
+
+---
+
+Thank you for choosing AppLock for your privacy needs. We welcome your feedback and suggestions through GitHub issues! 

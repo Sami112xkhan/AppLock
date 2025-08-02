@@ -329,7 +329,8 @@ class AppLockAccessibilityService : AccessibilityService() {
     }
 
     private fun shouldBeIgnored(packageName: String): Boolean {
-        return packageName in getLauncherPackageNames(this)
+        // Ignore launcher apps and the AppLock app itself
+        return packageName in getLauncherPackageNames(this) || packageName == "com.samikhan.applock"
     }
 
     private fun getKeyboardPackageNames(): List<String> {

@@ -52,10 +52,79 @@ class AppLockRepository(context: Context) {
         appLockPrefs.edit { putString(KEY_PASSWORD, password) }
     }
 
-    // Password validation
+    // Pattern
+    fun getPattern(): String? {
+        val pattern = appLockPrefs.getString(KEY_PATTERN, null)
+        Log.d("AppLockRepository", "Getting pattern: '$pattern'")
+        return pattern
+    }
+
+    fun setPattern(pattern: String) {
+        Log.d("AppLockRepository", "Setting pattern: '$pattern'")
+        appLockPrefs.edit { putString(KEY_PATTERN, pattern) }
+        // Verify the pattern was stored correctly
+        val stored = getPattern()
+        Log.d("AppLockRepository", "Pattern storage verification - Set: '$pattern', Retrieved: '$stored'")
+    }
+    
+    fun clearPattern() {
+        Log.d("AppLockRepository", "Clearing pattern")
+        appLockPrefs.edit { remove(KEY_PATTERN) }
+    }
+
+    // Lock type
+    fun getLockType(): LockType {
+        val type = appLockPrefs.getString(KEY_LOCK_TYPE, LockType.PIN.name)
+        return try {
+            LockType.valueOf(type ?: LockType.PIN.name)
+        } catch (e: IllegalArgumentException) {
+            LockType.PIN
+        }
+    }
+
+    fun setLockType(lockType: LockType) {
+        appLockPrefs.edit { putString(KEY_LOCK_TYPE, lockType.name) }
+    }
+
+    // Password/Pattern validation
     fun validatePassword(inputPassword: String): Boolean {
-        val storedPassword = getPassword()
-        return storedPassword != null && inputPassword == storedPassword
+        val lockType = getLockType()
+        Log.d("AppLockRepository", "Validating password - Input: '$inputPassword', LockType: $lockType")
+        
+        val result = when (lockType) {
+            LockType.PIN -> {
+                val storedPassword = getPassword()
+                Log.d("AppLockRepository", "PIN validation - Stored: '$storedPassword', Input: '$inputPassword'")
+                storedPassword != null && inputPassword == storedPassword
+            }
+            LockType.PATTERN -> {
+                val storedPattern = getPattern()
+                Log.d("AppLockRepository", "Pattern validation - Stored: '$storedPattern', Input: '$inputPassword'")
+                storedPattern != null && inputPassword == storedPattern
+            }
+        }
+        
+        Log.d("AppLockRepository", "Validation result: $result")
+        return result
+    }
+
+    fun hasLockSet(): Boolean {
+        val lockType = getLockType()
+        return when (lockType) {
+            LockType.PIN -> getPassword() != null
+            LockType.PATTERN -> getPattern() != null
+        }
+    }
+    
+    fun getDebugInfo(): String {
+        val lockType = getLockType()
+        val hasPassword = getPassword() != null
+        val hasPattern = getPattern() != null
+        val password = getPassword()
+        val pattern = getPattern()
+        
+        return "LockType: $lockType, HasPassword: $hasPassword, HasPattern: $hasPattern, " +
+               "Password: '$password', Pattern: '$pattern'"
     }
 
     // Unlock time duration
@@ -231,6 +300,8 @@ class AppLockRepository(context: Context) {
 
         private const val KEY_LOCKED_APPS = "locked_apps"
         private const val KEY_PASSWORD = "password"
+        private const val KEY_PATTERN = "pattern"
+        private const val KEY_LOCK_TYPE = "lock_type"
         private const val KEY_BIOMETRIC_AUTH_ENABLED = "use_biometric_auth"
         private const val KEY_PROMPT_FOR_BIOMETRIC_AUTH = "prompt_for_biometric_auth"
         private const val KEY_DISABLE_HAPTICS = "disable_haptics"
@@ -282,4 +353,9 @@ enum class BackendImplementation {
     ACCESSIBILITY,
     USAGE_STATS,
     SHIZUKU
+}
+
+enum class LockType {
+    PIN,
+    PATTERN
 }

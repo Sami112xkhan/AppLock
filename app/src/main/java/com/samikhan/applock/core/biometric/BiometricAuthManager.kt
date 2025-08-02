@@ -46,6 +46,7 @@ class BiometricAuthManager(
     private var onAuthSuccess: ((String) -> Unit)? = null
     private var onAuthFailure: ((String, String) -> Unit)? = null
     private var onAuthError: ((Int, String) -> Unit)? = null
+    private var isDeviceCredentialUsed = false
 
     /**
      * Check if biometric authentication is available on this device
@@ -249,15 +250,30 @@ class BiometricAuthManager(
 
             override fun onAuthenticationSucceeded(result: BiometricPrompt.AuthenticationResult) {
                 super.onAuthenticationSucceeded(result)
-                Log.d(TAG, "Biometric authentication succeeded for $currentPackageName")
                 
-                currentAuthState = AuthState.SUCCESS
-                AppLockManager.reportBiometricAuthFinished()
+                // Check if device credential was used
+                val usedDeviceCredential = result.authenticationType == BiometricManager.Authenticators.DEVICE_CREDENTIAL
+                Log.d(TAG, "Authentication succeeded for $currentPackageName, used device credential: $usedDeviceCredential")
                 
-                // Unlock the app
-                currentPackageName?.let { packageName ->
-                    AppLockManager.temporarilyUnlockAppWithBiometrics(packageName)
-                    onAuthSuccess?.invoke(packageName)
+                if (usedDeviceCredential) {
+                    // Device credential was used, don't unlock the app
+                    // Instead, let the password overlay handle it
+                    Log.d(TAG, "Device credential used, not unlocking app - will show pattern lock")
+                    currentAuthState = AuthState.FAILED
+                    currentPackageName?.let { packageName ->
+                        onAuthFailure?.invoke(packageName, "Device credential used")
+                    }
+                } else {
+                    // Biometric was used, unlock the app
+                    Log.d(TAG, "Biometric used, unlocking app")
+                    currentAuthState = AuthState.SUCCESS
+                    AppLockManager.reportBiometricAuthFinished()
+                    
+                    // Unlock the app
+                    currentPackageName?.let { packageName ->
+                        AppLockManager.temporarilyUnlockAppWithBiometrics(packageName)
+                        onAuthSuccess?.invoke(packageName)
+                    }
                 }
                 
                 // Reset state

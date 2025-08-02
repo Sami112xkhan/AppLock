@@ -162,6 +162,11 @@ class ShizukuAppLockService : Service() {
                 AppLockManager.clearTemporarilyUnlockedApp()
             }
         }
+        // Don't lock the AppLock app itself
+        if (packageName == "com.samikhan.applock") {
+            return
+        }
+        
         val lockedApps = appLockRepository.getLockedApps()
         if (!lockedApps.contains(packageName)) {
             return
